@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard - NIROB HOST</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <div class="logo">NIROB<span> HOST</span></div>
+    <nav><a href="/logout">Logout</a></nav>
+  </header>
+
+  <div class="container">
+    <div class="stats">
+      <div class="stat-card"><h4>Total Projects</h4><strong>{{ total }}</strong></div>
+      <div class="stat-card run"><h4>Running</h4><strong>{{ running }}</strong></div>
+      <div class="stat-card stop"><h4>Stopped</h4><strong>{{ stopped }}</strong></div>
+    </div>
+
+    <div class="section-header">
+      <h2>My Projects</h2>
+      <form action="/create" method="POST" class="inline-form">
+        <input type="text" name="name" placeholder="Project name" required>
+        <button class="btn">+ New</button>
+      </form>
+    </div>
+
+    <div class="project-grid">
+      {% for pid, p in projects.items() %}
+      <div class="project-card">
+        <div class="card-header">
+          <a href="/project/{{ pid }}">{{ p.name }}</a>
+          <span class="status {{ 'running' if p.status=='running' else 'stopped' }}">{{ p.status }}</span>
+        </div>
+        <span class="pid">ID: {{ pid }}</span>
+        <a href="/delete/{{ pid }}" class="del" onclick="return confirm('Delete?')">🗑 Delete</a>
+      </div>
+      {% else %}
+      <p>No projects yet. Create your first project!</p>
+      {% endfor %}
+    </div>
+  </div>
+</body>
+</html>

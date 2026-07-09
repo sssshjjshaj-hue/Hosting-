@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ proj.name }} - NIROB HOST</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="https://cdn.socket.io/4.5.0/socket.io.min.js"></script>
+</head>
+<body>
+  <header>
+    <div class="logo">NIROB<span> HOST</span></div>
+    <div class="project-meta">
+      <a href="/">← Dashboard</a>
+      <span>{{ proj.name }} <span class="pid">(ID: {{ pid }})</span></span>
+    </div>
+  </header>
+
+  <div class="container">
+    <!-- Metrics Bar -->
+    <div class="metrics-bar">
+      <div class="metric"><span class="label">Status</span> <b id="status">{{ proj.status }}</b></div>
+      <div class="metric"><span class="label">CPU</span> <b id="cpu">0</b>%</div>
+      <div class="metric"><span class="label">RAM</span> <b id="ram">0</b> MB</div>
+      <div class="metric"><span class="label">Uptime</span> <b id="uptime">00:00:00</b></div>
+      <button id="stopBtn" class="btn stop-btn" onclick="sendStop()">⏹ STOP</button>
+    </div>
+
+    <div class="split">
+      <!-- File Panel -->
+      <div class="file-panel">
+        <h3>📁 Files</h3>
+        <form action="/upload/{{ pid }}" method="POST" enctype="multipart/form-data" class="upload-form">
+          <input type="file" name="file" required>
+          <button class="btn">Upload</button>
+        </form>
+
+        <div class="file-list">
+          {% for f in files %}
+          <div class="file-row">
+            <span class="file-name">{{ f }}</span>
+            <div class="actions">
+              {% if f.endswith('.py') %}
+              <button class="btn run-btn" onclick="runFile('{{ f }}')">▶ Run</button>
+              {% endif %}
+              {% if f == 'requirements.txt' %}
+              <button class="btn install-btn" onclick="installReq()">📦 Install Deps</button>
+              {% endif %}
+              <a href="/delete_file/{{ pid }}/{{ f }}" class="del">🗑</a>
+            </div>
+          </div>
+          {% else %}
+          <p>No files uploaded</p>
+          {% endfor %}
+        </div>
+
+        <div class="pip-box">
+          <input type="text" id="pkgInput" placeholder="Package name (e.g. flask)">
+          <button class="btn" onclick="pipInstall()">Install Package</button>
+        </div>
+      </div>
+
+      <!-- Log Panel -->
+      <div class="log-panel">
+        <div class="log-header">
+          <h3>📄 Output Log</h3>
+          <button class="btn small" onclick="clearLog()">Clear</button>
+        </div>
+        <pre id="logBox" class="log-output">NIROB HOST - Ready\nUpload a .py file and click Run to see output.\n</pre>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const pid = "{{ pid }}";
+    const socket = io.connect();
+
+    socket.on('connect', () => {
+      socket.emit('join', {pid: pid});
+    });
+
+    socket.on('log', data => {
+      const box = document.getElementById('logBox');
+      box.textContent += data.msg;
+      box.scrollTop = box.scrollHeight;
+    });
+
+    socket.on('process_stopped', data => {
+      if(data.pid == pid) {
+        document.getElementById('status').textContent = 'stopped';
+        document.getElementById('logBox').textContent += '\n--- Process stopped ---\n';
+      }
+    });
+
+    socket.on('status_update', data => {
+      document.getElementById('status').textContent = data.status;
+    });
+
+    socket.on('metrics', data => {
+      document.getElementById('cpu').textContent = data.cpu;
+      document.getElementById('ram').textContent = data.ram;
+      document.getElementById('uptime').textContent = data.uptime;
+    });
+
+    function runFile(filename) {
+      socket.emit('run_file', {pid: pid, filename: filename});
+    }
+
+    function sendStop() {
+      socket.emit('stop_process', {pid: pid});
+    }
+
+    function installReq() {
+      socket.emit('install_requirements', {pid: pid});
+    }
+
+    function pipInstall() {
+      const pkg = document.getElementById('pkgInput').value.trim();
+      if(pkg) {
+        socket.emit('pip_install', {pid: pid, package: pkg});
+        document.getElementById('pkgInput').value = '';
+      }
+    }
+
+    function clearLog() {
+      document.getElementById('logBox').textContent = '';
+    }
+  </script>
+</body>
+</html>
