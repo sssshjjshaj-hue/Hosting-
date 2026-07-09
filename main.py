@@ -7,7 +7,8 @@ import psutil
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'nirob-secret-2025'
-socketio = SocketIO(app, cors_allowed_origins="*")
+# eventlet ব্যাকএন্ড ব্যবহার করার জন্য async_mode সেট করা হলো
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 
 BASE_DIR = Path(__file__).parent
 PROJECTS_DIR = BASE_DIR / 'projects'
@@ -128,7 +129,7 @@ def handle_join(data):
         join_room(f'proj_{pid}')
         if pid in projects:
             emit('status_update', {'status': projects[pid]['status']})
-            emit('metrics', {'cpu': '0', 'ram': '0', 'uptime': '00:00:00'})
+            emit('metrics', {'cpu': '0.0', 'ram': '0.0', 'uptime': '00:00:00'})
 
 @socketio.on('run_file')
 def handle_run_file(data):
@@ -157,6 +158,7 @@ def handle_run_file(data):
         save_json(DATA_DIR/'projects.json', projects)
         emit('status_update', {'status': 'running'})
         emit('log', {'msg': f'▶ Running {filename}\n'})
+        
         def reader():
             start = time.time()
             while True:
@@ -165,13 +167,20 @@ def handle_run_file(data):
                     break
                 if line:
                     emit('log', {'msg': line})
+                
+                # Railway তে psutil ক্র্যাশ ঠেকানোর জন্য সেফ ট্রাই-ক্যাচ
                 try:
                     p = psutil.Process(proc.pid)
-                    cpu = p.cpu_percent(0.1) / psutil.cpu_count()
-                    mem = p.memory_info().rss / 1024**2
+                    if p.is_running():
+                        cpu = p.cpu_percent(interval=None) / psutil.cpu_count()
+                        mem = p.memory_info().rss / 1024**2
+                        uptime = time.strftime('%H:%M:%S', time.gmtime(time.time()-start))
+                        emit('metrics', {'cpu': f'{cpu:.1f}', 'ram': f'{mem:.1f}', 'uptime': uptime})
+                except Exception:
+                    # যদি পারমিশন না পায়, অ্যাপ ক্র্যাশ না করে শুধু মেট্রিক্স ০ দেখাবে
                     uptime = time.strftime('%H:%M:%S', time.gmtime(time.time()-start))
-                    emit('metrics', {'cpu': f'{cpu:.1f}', 'ram': f'{mem:.1f}', 'uptime': uptime})
-                except: pass
+                    emit('metrics', {'cpu': '0.0', 'ram': '0.0', 'uptime': uptime})
+                    
             stop_process(pid)
         threading.Thread(target=reader, daemon=True).start()
     except Exception as e:
@@ -246,4 +255,6 @@ def handle_pip_install(data):
         emit('log', {'msg': str(e)})
 
 if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True)
+    # Railway পোর্ট সাপোর্ট
+    port = int(os.environ.get("PORT", 5000))
+    socketio.run(app, host='0.0.0.0', port=port, debug=False)
